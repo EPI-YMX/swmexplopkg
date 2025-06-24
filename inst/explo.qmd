@@ -1,0 +1,630 @@
+---
+title: "Analyse des données HM SWM"
+format:
+  html:
+    toc: true
+    toc-location: left
+    toc-depth: 2    
+echo: false
+message: false
+embed-resources: true
+---
+
+
+```{r}
+#| label: setup
+#| echo: false
+#| message: false
+#| warning: false
+#| include: false
+
+# Load libraries and source external functions
+library(swmexplopkg)
+library(DT)
+library(ggplot2)
+library(shiny)
+```
+
+<!-- Cleaning SWM base -->
+
+```{r}
+swm_base <- data_clean_swm_base(
+    system.file(
+        "data",
+        "Base clients HM sur SMS avec statut et activité.xlsx",
+        package = "swmexplopkg"
+    )
+)
+```
+
+<!-- Cleaning finess base -->
+
+```{r}
+t_finess_4326 <- data_clean_finess(
+    system.file("data", "t-finess.csv", package = "swmexplopkg"),
+    keep_only_mco_ssr_psy = TRUE
+)
+```
+
+# Description du dataset SWM
+
+Le dataset est composé de `r nrow(swm_base)` établissements.
+
+On filtre le dataset SWM à partir du dataset T-FINESS pour ne garder que les établissements considérés comme actifs.
+
+```{r}
+finess_raw <- data.table::fread(system.file(
+    "data",
+    "t-finess.csv",
+    package = "swmexplopkg"
+))
+# finess_actifs <- finess_raw[etat == "ACTUEL" & statut_jur_etat == "O", "finess"]
+# finess_raw_as_sf <- finess_raw %>%
+#     st_as_sf(coords = c("geoloc_4326_long", "geoloc_4326_lat")) %>%
+#     st_set_crs(4326)
+
+swm_base_pre_filtre_finess <- swm_base
+
+swm_base <- keep_only_active_only_on_finess(swm_base, finess_raw)
+```
+
+Suite à celà il reste `r nrow(swm_base)` établissements.
+
+Voici les établissements supprimés:
+
+```{r}
+etablissements_supprimes <- swm_base_pre_filtre_finess %>%
+    anti_join(
+        select(swm_base, finess_geographique),
+        by = c("finess_geographique" = "finess_geographique")
+    )
+
+DT::datatable(
+    etablissements_supprimes,
+    filter = "top",
+    extensions = "Buttons",
+    options = list(
+        pageLength = 10,
+        lengthChange = FALSE,
+        scrollX = TRUE,
+        dom = "Bfrtip",
+        buttons = list(list(
+            extend = "excel",
+            text = "Télécharger Excel",
+            filename = "etablissements_hm_swm_pre_filtre_finess"
+        ))
+    )
+)
+```
+
+## Présence de HM
+
+```{r}
+hm_plot(swm_base)
+```
+
+**Pour la suite, on filtre sur les établissements avec HM**
+
+```{r}
+swm_base_hm <- swm_base %>%
+    filter(hopital_manager == "HM")
+```
+
+On travaille finalement sur `r nrow(swm_base_hm)` établissements.
+
+## Dataset et localisation des établissements
+
+```{r}
+DT::datatable(
+    swm_base_hm,
+    filter = "top",
+    extensions = "Buttons",
+    options = list(
+        pageLength = 10,
+        lengthChange = FALSE,
+        scrollX = TRUE,
+        dom = "Bfrtip",
+        buttons = list(
+            list(
+                extend = "excel",
+                text = "Télécharger Excel",
+                filename = "etablissements_hm_swm"
+            )
+        )
+    )
+)
+```
+
+```{r}
+swm_with_coordinates <- add_coordinates_in_swm(swm_base_hm, finess_raw)
+```
+
+```{r}
+leaflet(swm_with_coordinates) %>%
+    addTiles() %>%
+    addMarkers(label = ~nom_du_compte, clusterOptions = markerClusterOptions())
+```
+
+## Description générale
+
+### Forme juridique
+
+```{r}
+forme_juridique_plot(swm_base_hm)
+```
+
+### Types de lits
+
+```{r}
+nombre_lits_plot(swm_base_hm)
+```
+
+### Nombre de lits
+
+```{r}
+swm_base_long <- reshape_swm_base_long(swm_base_hm)
+swm_base_summarized <- count_swm_base_long(swm_base_long)
+
+nombre_lits_par_type_lit(swm_base_summarized)
+```
+
+## Nombre d'établissements / lits par département
+
+```{r}
+stats_dept_swm <- stats_by_dept(
+    system.file("data", "departements.geojson", package = "swmexplopkg"),
+    swm_base_long
+)
+```
+
+### Nombre d'établissements par département (tous types de lits confondus)
+
+```{r}
+stats_by_dept_map(
+    stats_dept_swm,
+    "nb_etablissements",
+    "Nombre d'établissements"
+)
+```
+
+### Nombre de lits par département (tous types de lits confondus)
+
+```{r}
+stats_by_dept_map(stats_dept_swm, "nb_lits", "Nombre de lits")
+```
+
+# Comparaison avec le dataset T-FINESS
+
+Le jeu de données T-FINESS est filtré a priori pour ne garder que les établissements avec au moins un lit de MCO, SSR ou PSY.
+
+## Description du dataset
+
+```{r}
+stats_dept_finess <- stats_by_dept_finess(t_finess_4326)
+```
+
+```{r}
+stats_dept_finess %>%
+    filter(type_lit != "MCO+SSR+PSY") %>%
+    group_by(type_lit) %>%
+    summarise(value = sum(value, na.rm = TRUE)) %>%
+    ggplot(aes(x = type_lit, y = value, fill = type_lit)) +
+    geom_col() +
+    theme_minimal() +
+    labs(
+        title = "Nombre d'établissements par type de lit",
+        x = "Type de lit",
+        y = "Nombre d'établissements"
+    )
+```
+
+## Comparaison avec SWM
+
+Le ratio correspond au nombre d'établissements du dataset SWM par rapport au nombre d'établissements du dataset T-FINESS.
+
+Les "NA" correspondent à des valeurs incohérentes, e.g plus d'établissements dans SWM que dans T-FINESS.
+
+
+```{r}
+join_swm_finess <- inner_join(
+    stats_dept_swm,
+    stats_dept_finess,
+    by = c("code" = "dept", "type_lit" = "type_lit", "indicator" = "indicator"),
+    suffix = c("_swm", "_finess")
+) %>%
+    mutate(ratio_etablissements = value_swm / value_finess * 100) %>%
+    mutate(
+        ratio_etablissements = case_when(
+            ratio_etablissements > 100 ~ NA_real_,
+            ratio_etablissements < 0 ~ NA_real_,
+            TRUE ~ ratio_etablissements
+        )
+    )
+```
+
+### MCO / SSR / PSY confondus
+
+```{r}
+data_map <- join_swm_finess %>%
+    filter(type_lit == "MCO+SSR+PSY")
+
+ratio_map(data_map)
+```
+
+### MCO seul
+
+```{r}
+data_map <- join_swm_finess %>%
+    filter(type_lit == "MCO")
+
+ratio_map(data_map)
+```
+
+### SSR seul
+
+```{r}
+data_map <- join_swm_finess %>%
+    filter(type_lit == "SSR")
+
+ratio_map(data_map)
+```
+
+### PSY seul
+
+```{r}
+data_map <- join_swm_finess %>%
+    filter(type_lit == "PSY")
+
+ratio_map(data_map)
+```
+
+### Explorer les données
+
+```{r}
+join_swm_finess %>%
+    st_drop_geometry() %>%
+    DT::datatable(
+        filter = "top",
+        extensions = "Buttons",
+        options = list(
+            pageLength = 10,
+            lengthChange = FALSE,
+            scrollX = TRUE,
+            dom = "Bfrtip",
+            buttons = list(
+                list(
+                    extend = "excel",
+                    text = "Télécharger Excel",
+                    filename = "etablissements_hm_swm"
+                )
+            )
+        )
+    )
+```
+
+
+
+
+
+```{r}
+#| message: false
+#| warning: false
+join_swm_finess %>%
+    ggplot(aes(x = ratio_etablissements, fill = type_lit)) +
+    geom_histogram() +
+    theme_minimal() +
+    labs(
+        title = "Distribution des ratios établissements",
+        x = "Ratio établissements",
+        y = "Nombre d'établissements"
+    ) +
+    facet_wrap(~type_lit)
+```
+
+## Comparaison MCO / PSY / SSR entre les 2 datasets
+
+```{r}
+nb_etablissements_finess <- length(unique(t_finess_4326$finess))
+summary_lits_finess <- t_finess_4326 %>%
+    st_drop_geometry() %>%
+    summarise(
+        mco = sum(mco, na.rm = TRUE),
+        ssr = sum(ssr, na.rm = TRUE),
+        psy = sum(psy, na.rm = TRUE)
+    ) %>%
+    pivot_longer(
+        cols = c(mco, ssr, psy),
+        names_to = "type_lit",
+        values_to = "nb_etablissements"
+    ) %>%
+    mutate(source = "finess") %>%
+    mutate(nb_etablissements_total = nb_etablissements_finess)
+
+summary_etablissements_swm_finess <- bind_rows(
+    summary_lits_swm,
+    summary_lits_finess
+) %>%
+    group_by(source) %>%
+    mutate(ratio = nb_etablissements / nb_etablissements_total * 100) %>%
+    ungroup()
+
+ggplot(
+    summary_etablissements_swm_finess,
+    aes(x = type_lit, y = ratio, fill = source)
+) +
+    geom_col() +
+    theme_minimal() +
+    facet_wrap(~source) +
+    labs(
+        title = "Comparaison MCO / PSY / SSR entre les 2 datasets",
+        x = "Type de lit",
+        y = "% d'établissements"
+    )
+```
+
+## Comparaison public / privé entre les 2 datasets
+
+```{r}
+swm_base_hm_public_prive <- swm_base_hm %>%
+    mutate(
+        forme_juridique = case_when(
+            grepl("espic", tolower(forme_juridique)) ~ "privé",
+            TRUE ~ tolower(forme_juridique)
+        )
+    )
+
+
+summary_forme_juridique_swm <- swm_base_hm_public_prive %>%
+    count(forme_juridique, name = "nb_etablissements") %>%
+    mutate(source = "swm") %>%
+    mutate(nb_etablissements_total = nb_etablissements_swm)
+
+summary_forme_juridique_finess <- t_finess_4326 %>%
+    st_drop_geometry() %>%
+    count(forme_juridique, name = "nb_etablissements") %>%
+    mutate(source = "finess") %>%
+    mutate(nb_etablissements_total = nb_etablissements_finess)
+
+summary_forme_juridique <- bind_rows(
+    summary_forme_juridique_swm,
+    summary_forme_juridique_finess
+) %>%
+    group_by(source) %>%
+    mutate(ratio = nb_etablissements / nb_etablissements_total * 100) %>%
+    ungroup()
+
+ggplot(
+    summary_forme_juridique,
+    aes(x = forme_juridique, y = ratio, fill = source)
+) +
+    geom_col() +
+    theme_minimal() +
+    facet_wrap(~source) +
+    labs(
+        title = "Comparaison public / privé entre les 2 datasets",
+        x = "Forme juridique",
+        y = "Ratio"
+    )
+```
+
+## Recalculons les ratios uniquements sur le privé
+
+Cela représente `r nrow(swm_base_hm %>% filter(forme_juridique != "Public"))` établissement pour SWM, contre `r  t_finess_4326 %>% filter(forme_juridique == "privé") %>% nrow()` pour T-FINESS.
+
+
+```{r}
+stats_dept_swm_prive <- stats_by_dept(
+    "data/departements.geojson",
+    swm_base_long %>% filter(forme_juridique != "Public")
+)
+
+stats_finess_prive <- finess_long %>%
+    filter(forme_juridique == "privé") %>%
+    group_by(dept, type_lit) %>%
+    summarise(
+        value = sum(nb_etablissements, na.rm = TRUE),
+        .groups = "drop"
+    ) %>%
+    mutate(type_lit = toupper(type_lit)) %>%
+    mutate(indicator = "nb_etablissements")
+
+stats_globales_finess_prive <- finess_long %>%
+    filter(forme_juridique == "privé") %>%
+    group_by(dept) %>%
+    summarise(value = n_distinct(finess, na.rm = TRUE)) %>%
+    mutate(type_lit = "MCO+SSR+PSY") %>%
+    distinct() %>%
+    mutate(indicator = "nb_etablissements") %>%
+    select(dept, type_lit, value, indicator)
+
+stats_dept_finess_prive <- bind_rows(
+    stats_finess_prive,
+    stats_globales_finess_prive
+)
+
+join_swm_finess_prive <- inner_join(
+    stats_dept_swm_prive,
+    stats_dept_finess_prive,
+    by = c("code" = "dept", "type_lit" = "type_lit", "indicator" = "indicator"),
+    suffix = c("_swm", "_finess")
+) %>%
+    mutate(ratio_etablissements = value_swm / value_finess * 100) %>%
+    mutate(
+        ratio_etablissements = case_when(
+            ratio_etablissements > 100 ~ NA_real_,
+            ratio_etablissements < 0 ~ NA_real_,
+            TRUE ~ ratio_etablissements
+        )
+    )
+```
+
+
+### MCO / SSR / PSY confondus
+
+```{r}
+data_map <- join_swm_finess_prive %>%
+    filter(type_lit == "MCO+SSR+PSY")
+
+ratio_map(data_map)
+```
+
+### MCO seul
+
+```{r}
+data_map <- join_swm_finess_prive %>%
+    filter(type_lit == "MCO")
+
+ratio_map(data_map)
+```
+
+### SSR seul
+
+Les NA correspondent à des valeurs incohérentes, e.g plus d'établissements dans SWM que dans T-FINESS.
+
+```{r}
+data_map <- join_swm_finess_prive %>%
+    filter(type_lit == "SSR")
+
+ratio_map(data_map)
+```
+
+### PSY seul
+
+```{r}
+data_map <- join_swm_finess_prive %>%
+    filter(type_lit == "PSY")
+
+ratio_map(data_map)
+```
+
+```{r}
+#| message: false
+#| warning: false
+join_swm_finess_prive %>%
+    ggplot(aes(x = ratio_etablissements, fill = type_lit)) +
+    geom_histogram() +
+    theme_minimal() +
+    labs(
+        title = "Distribution des ratios établissements",
+        x = "Ratio établissements",
+        y = "Nombre d'établissements"
+    ) +
+    facet_wrap(~type_lit)
+```
+
+### Explorer les données (privé uniquement)
+
+```{r}
+join_swm_finess_prive %>%
+    st_drop_geometry() %>%
+    DT::datatable(
+        filter = "top",
+        extensions = "Buttons",
+        options = list(
+            pageLength = 10,
+            lengthChange = FALSE,
+            scrollX = TRUE,
+            dom = "Bfrtip",
+            buttons = list(
+                list(
+                    extend = "excel",
+                    text = "Télécharger Excel",
+                    filename = "etablissements_hm_swm_prive"
+                )
+            )
+        )
+    )
+```
+
+
+
+
+
+
+
+# Divergence entre les 2 datasets
+
+Certains établissements indiqués comme ayant des lits de MCO, SSR ou PSY dans le dataset SWM ne sont pas catégorisés comme tels dans le dataset T-FINESS, et inversement.
+
+### Divergence MCO
+
+```{r}
+find_divergence(
+    swm_base_hm,
+    t_finess_4326,
+    "has_mco",
+    "mco"
+) %>%
+    DT::datatable(
+        extensions = "Buttons",
+        options = list(
+            pageLength = 10,
+            lengthChange = FALSE,
+            scrollX = TRUE,
+            dom = "Bfrtip",
+            buttons = list(
+                list(
+                    extend = "excel",
+                    text = "Télécharger Excel",
+                    filename = "etablissements_hm_swm_prive"
+                )
+            )
+        )
+    )
+```
+
+
+### Divergence SSR
+
+```{r}
+find_divergence(
+    swm_base_hm,
+    t_finess_4326,
+    "has_ssr",
+    "ssr"
+) %>%
+    DT::datatable(
+        extensions = "Buttons",
+        options = list(
+            pageLength = 10,
+            lengthChange = FALSE,
+            scrollX = TRUE,
+            dom = "Bfrtip",
+            buttons = list(
+                list(
+                    extend = "excel",
+                    text = "Télécharger Excel",
+                    filename = "etablissements_hm_swm_prive"
+                )
+            )
+        )
+    )
+```
+
+
+### Divergence PSY
+
+```{r}
+find_divergence(
+    swm_base_hm,
+    t_finess_4326,
+    "has_psy",
+    "psy"
+) %>%
+    DT::datatable(
+        extensions = "Buttons",
+        options = list(
+            pageLength = 10,
+            lengthChange = FALSE,
+            scrollX = TRUE,
+            dom = "Bfrtip",
+            buttons = list(
+                list(
+                    extend = "excel",
+                    text = "Télécharger Excel",
+                    filename = "etablissements_hm_swm_prive"
+                )
+            )
+        )
+    )
+```
