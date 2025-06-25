@@ -1,3 +1,6 @@
+#' @export
+#' @import dplyr
+#' @import sf
 add_coordinates_in_swm <- function(swm_base, finess_raw) {
     finess_raw_as_sf <- finess_raw %>%
         st_as_sf(coords = c("geoloc_4326_long", "geoloc_4326_lat")) %>%
@@ -13,7 +16,7 @@ add_coordinates_in_swm <- function(swm_base, finess_raw) {
 }
 
 
-#' @noRd
+#' @export
 #' @import leaflet
 ratio_map <- function(data_map) {
     pal <- colorNumeric(
@@ -54,7 +57,10 @@ ratio_map <- function(data_map) {
         )
 }
 
-
+#' @export
+#' @import leaflet
+#' @import dplyr
+#' @import sf
 stats_by_dept_map <- function(stats_dept_swm, indicator_used, title) {
     stats_by_dept_all <- stats_dept_swm %>%
         filter(type_lit == "MCO+SSR+PSY") %>%
@@ -76,8 +82,9 @@ stats_by_dept_map <- function(stats_dept_swm, indicator_used, title) {
         left_join(tooltip, by = c("code", "nom", "indicator"))
 
     pal <- colorNumeric(
-        palette = "YlGnBu",
-        domain = stats_by_dept_all$value
+        palette = "inferno",
+        domain = stats_by_dept_all$value,
+        reverse = TRUE
     )
 
     leaflet(stats_by_dept_all) %>%

@@ -1,4 +1,4 @@
-#' @noRd
+#' @export
 #' @import dplyr
 #' @import sf
 stats_by_dept <- function(dept_path, swm_base_long) {
@@ -25,7 +25,10 @@ stats_by_dept <- function(dept_path, swm_base_long) {
         filter(!is.na(type_lit))
 }
 
-
+#' @export
+#' @import dplyr
+#' @import tidyr
+#' @import sf
 stats_by_dept_finess <- function(t_finess_4326) {
     finess_long <- st_drop_geometry(t_finess_4326) %>%
         pivot_longer(

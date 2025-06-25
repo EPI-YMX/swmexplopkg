@@ -6,6 +6,7 @@ library(leaflet)
 library(dplyr)
 library(sf)
 library(scales)
+library(tidyr)
 
 # Load and process data using package functions
 swm_base <- data_clean_swm_base(
@@ -205,7 +206,7 @@ ui <- fluidPage(
                     6,
                     wellPanel(
                         h4(
-                            "Répartition par forme juridique (établissements avec HM)"
+                            "Répartition par forme juridique"
                         ),
                         plotOutput("forme_juridique_plot")
                     )
@@ -323,6 +324,7 @@ server <- function(input, output) {
     })
 
     output$dept_lits_map <- renderLeaflet({
+        browser()
         stats_by_dept_map(stats_dept_swm, "nb_lits", "Nombre de lits")
     })
 

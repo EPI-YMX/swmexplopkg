@@ -1,4 +1,4 @@
-#' @noRd
+#' @export
 #' @import dplyr
 #' @import tidyr
 summarize_lits_swm <- function(swm_base_hm) {
@@ -16,7 +16,9 @@ summarize_lits_swm <- function(swm_base_hm) {
         mutate(source = "swm")
 }
 
-# Function to reshape SWM base for long format
+#' @export
+#' @import dplyr
+#' @import tidyr
 reshape_swm_base_long <- function(swm_base_hm) {
     swm_base_long <- swm_base_hm %>%
         pivot_longer(
@@ -70,7 +72,7 @@ reshape_swm_base_long <- function(swm_base_hm) {
         )
 }
 
-#' @noRd
+#' @export
 count_swm_base_long <- function(swm_base_long) {
     swm_base_long %>%
         group_by(type_lit, indicator) %>%

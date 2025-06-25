@@ -1,4 +1,4 @@
-#' @noRd
+#' @export
 #' @import readxl
 #' @import dplyr
 #' @import janitor
@@ -50,7 +50,7 @@ data_clean_swm_base <- function(path) {
     swm_base
 }
 
-#' @noRd
+#' @export
 #' @import data.table
 #' @import dplyr
 #' @import sf
@@ -103,7 +103,7 @@ data_clean_finess <- function(path, keep_only_mco_ssr_psy = FALSE) {
     t_finess_4326
 }
 
-#' @noRd
+#' @export
 #' @import data.table
 #' @import dplyr
 keep_only_active_only_on_finess <- function(swm_base, t_finess) {

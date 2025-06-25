@@ -1,4 +1,4 @@
-#' @noRd
+#' @export
 find_divergence <- function(
     swm_base_hm,
     t_finess_4326,
