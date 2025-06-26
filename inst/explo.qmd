@@ -23,6 +23,8 @@ library(swmexplopkg)
 library(DT)
 library(ggplot2)
 library(shiny)
+library(dplyr)
+library(leaflet)
 ```
 
 <!-- Cleaning SWM base -->

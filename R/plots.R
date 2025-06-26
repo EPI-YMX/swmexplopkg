@@ -40,15 +40,11 @@ nombre_lits_plot <- function(swm_base) {
         ggplot(aes(x = type_lit, y = nb_etablissements, fill = type_lit)) +
         geom_col() +
         scale_fill_viridis_d(name = "Type de lit") +
-        scale_y_continuous(
-            labels = scales::comma,
-            breaks = seq(0, max(swm_base_summarized$value), 25000)
-        ) +
         theme_minimal() +
         labs(
-            title = "Nombre de lits par type de lit",
+            title = "Nombre d'établissements par type de lit",
             x = "Type de lit",
-            y = "Nombre de lits"
+            y = "Nombre d'établissements"
         )
 }
 

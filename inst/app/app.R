@@ -64,8 +64,8 @@ join_swm_finess <- inner_join(
     mutate(ratio_etablissements = value_swm / value_finess * 100) %>%
     mutate(
         ratio_etablissements = case_when(
-            ratio_etablissements > 100 ~ NA_real_,
-            ratio_etablissements < 0 ~ NA_real_,
+            ratio_etablissements > 100 ~ 100,
+            ratio_etablissements < 0 ~ 0,
             TRUE ~ ratio_etablissements
         )
     )
@@ -199,7 +199,7 @@ ui <- fluidPage(
                     6,
                     wellPanel(
                         h4("Nombre de lits"),
-                        plotOutput("nombre_lits_plot")
+                        plotOutput("nombre_lits_par_type_lit")
                     )
                 ),
                 column(
@@ -311,7 +311,7 @@ server <- function(input, output) {
     })
 
     # Description générale plots
-    output$nombre_lits_plot <- renderPlot({
+    output$nombre_lits_par_type_lit <- renderPlot({
         nombre_lits_par_type_lit(swm_base_summarized)
     })
 
@@ -324,7 +324,6 @@ server <- function(input, output) {
     })
 
     output$dept_lits_map <- renderLeaflet({
-        browser()
         stats_by_dept_map(stats_dept_swm, "nb_lits", "Nombre de lits")
     })
 
