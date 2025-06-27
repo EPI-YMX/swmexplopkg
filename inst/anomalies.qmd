@@ -1,0 +1,187 @@
+---
+title: "Analyse des données HM SWM"
+format:
+  html:
+    toc: true
+    toc-location: left
+    toc-depth: 2    
+echo: false
+message: false
+embed-resources: true
+---
+
+
+```{r}
+#| label: setup
+#| echo: false
+#| message: false
+#| warning: false
+#| include: false
+
+# Load libraries and source external functions
+library(swmexplopkg)
+library(DT)
+library(ggplot2)
+library(shiny)
+library(dplyr)
+library(leaflet)
+library(sf)
+library(data.table)
+library(tidyr)
+library(dplyr)
+```
+
+<!-- Cleaning SWM base -->
+
+```{r}
+swm_base <- data_clean_swm_base(
+    system.file(
+        "data",
+        "Base clients HM sur SMS avec statut et activité.xlsx",
+        package = "swmexplopkg"
+    )
+)
+```
+
+Initialement, on a `r nrow(swm_base)` établissements.
+
+<!-- Cleaning finess base -->
+
+```{r}
+t_finess_4326 <- data_clean_finess(
+    system.file("data", "t-finess.csv", package = "swmexplopkg"),
+    keep_only_mco_ssr_psy = TRUE
+)
+```
+
+On filtre le dataset SWM à partir du dataset T-FINESS pour ne garder que les établissements considérés comme actifs.
+
+```{r}
+finess_raw <- data.table::fread(system.file(
+    "data",
+    "t-finess.csv",
+    package = "swmexplopkg"
+))
+swm_base <- swm_base %>%
+    mutate(id = row_number())
+
+swm_base_pre_filtre_finess <- swm_base
+
+swm_base <- keep_only_active_only_on_finess(swm_base, finess_raw)
+```
+
+Suite à celà il reste `r nrow(swm_base)` établissements.
+
+Voici les établissements supprimés:
+
+```{r}
+etablissements_supprimes <- swm_base_pre_filtre_finess %>%
+    anti_join(
+        select(swm_base, id),
+        by = c("id")
+    )
+
+DT::datatable(
+    etablissements_supprimes,
+    filter = "top",
+    extensions = "Buttons",
+    options = list(
+        pageLength = 10,
+        lengthChange = FALSE,
+        scrollX = TRUE,
+        dom = "Bfrtip",
+        buttons = list(list(
+            extend = "excel",
+            text = "Télécharger Excel",
+            filename = "etablissements_hm_swm_pre_filtre_finess"
+        ))
+    )
+)
+```
+
+# Divergence entre les 2 datasets sur la classification des lits
+
+Certains établissements indiqués comme ayant des lits de MCO, SSR ou PSY dans le dataset SWM ne sont pas catégorisés comme tels dans le dataset T-FINESS, et inversement.
+
+### Divergence MCO
+
+```{r}
+find_divergence(
+    swm_base,
+    t_finess_4326,
+    "has_mco",
+    "mco"
+) %>%
+    DT::datatable(
+        extensions = "Buttons",
+        options = list(
+            pageLength = 10,
+            lengthChange = FALSE,
+            scrollX = TRUE,
+            dom = "Bfrtip",
+            buttons = list(
+                list(
+                    extend = "excel",
+                    text = "Télécharger Excel",
+                    filename = "etablissements_hm_swm_prive"
+                )
+            )
+        )
+    )
+```
+
+
+### Divergence SSR
+
+```{r}
+find_divergence(
+    swm_base,
+    t_finess_4326,
+    "has_ssr",
+    "ssr"
+) %>%
+    DT::datatable(
+        extensions = "Buttons",
+        options = list(
+            pageLength = 10,
+            lengthChange = FALSE,
+            scrollX = TRUE,
+            dom = "Bfrtip",
+            buttons = list(
+                list(
+                    extend = "excel",
+                    text = "Télécharger Excel",
+                    filename = "etablissements_hm_swm_prive"
+                )
+            )
+        )
+    )
+```
+
+
+### Divergence PSY
+
+```{r}
+find_divergence(
+    swm_base,
+    t_finess_4326,
+    "has_psy",
+    "psy"
+) %>%
+    DT::datatable(
+        extensions = "Buttons",
+        options = list(
+            pageLength = 10,
+            lengthChange = FALSE,
+            scrollX = TRUE,
+            dom = "Bfrtip",
+            buttons = list(
+                list(
+                    extend = "excel",
+                    text = "Télécharger Excel",
+                    filename = "etablissements_hm_swm_prive"
+                )
+            )
+        )
+    )
+```

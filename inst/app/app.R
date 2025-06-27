@@ -115,7 +115,7 @@ ui <- fluidPage(
         tags$style(HTML(value_box_css))
     ),
 
-    titlePanel("Présence de Hospital Manager en France"),
+    titlePanel("Présence de Hopital Manager en France"),
 
     tabsetPanel(
         # Overview tab
@@ -129,7 +129,7 @@ ui <- fluidPage(
                         div(class = "value", nrow(swm_base_hm)),
                         div(
                             class = "label",
-                            "Établissements avec Hospital Manager"
+                            "Établissements avec Hopital Manager"
                         )
                     )
                 ),

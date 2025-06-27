@@ -29,9 +29,29 @@ library(sf)
 library(data.table)
 library(tidyr)
 library(dplyr)
+library(readxl)
+library(janitor)
 ```
 
 <!-- Cleaning SWM base -->
+
+```{r}
+apm_raw <- read_excel(
+    system.file(
+        "data",
+        "apm_intelligence.xlsx",
+        package = "swmexplopkg"
+    ),
+    skip = 1
+) %>%
+    clean_names() %>%
+    rename(finess = code) %>%
+    mutate(
+        nombre_de_lits_et_places_mco = capacites_mco_2023,
+        nombre_de_lits_et_places_ssr = lits_smr_2023 + places_smr_2023,
+        nombre_de_lits_et_places_psy = lits_psy_2023 + places_psy_tps_complet_2023 + places_psy_tps_partiel_2023
+    )
+```
 
 ```{r}
 swm_base <- data_clean_swm_base(
@@ -41,7 +61,97 @@ swm_base <- data_clean_swm_base(
         package = "swmexplopkg"
     )
 )
+
+swm_light <- swm_base %>%
+    select(finess_juridique, finess_geographique, nombre_de_lits_et_places_mco, nombre_de_lits_et_places_ssr, nombre_de_lits_et_places_psy)
+
+apm_light <- apm_raw %>%
+    select(finess, nombre_de_lits_et_places_mco, nombre_de_lits_et_places_ssr, nombre_de_lits_et_places_psy) %>%
+    mutate(across(contains("nombre_de_lits_et_places"), ~ replace_na(., 0)))
+
+join_swm_apm <- bind_rows(
+    inner_join(
+        swm_light,
+        apm_light,
+        by = c("finess_geographique" = "finess"),
+        suffix = c("_swm", "_apm")
+    ),
+    inner_join(
+        swm_light,
+        apm_light,
+        by = c("finess_juridique" = "finess"),
+        suffix = c("_swm", "_apm")
+    )
+) %>%
+    distinct() %>%
+    mutate(
+        diff_mco = nombre_de_lits_et_places_mco_swm - nombre_de_lits_et_places_mco_apm,
+        diff_ssr = nombre_de_lits_et_places_ssr_swm - nombre_de_lits_et_places_ssr_apm,
+        diff_psy = nombre_de_lits_et_places_psy_swm - nombre_de_lits_et_places_psy_apm
+    )
+
+summary(join_swm_apm$diff_mco)
+summary(join_swm_apm$diff_ssr)
+summary(join_swm_apm$diff_psy)
+
+
+join_swm_apm %>%
+    filter(diff_mco == min(diff_mco) | diff_mco == max(diff_mco)) %>%
+    View()
+
+
+
+skimr::skim(join_swm_apm)
 ```
+
+
+```{r}
+t_finess <- data_clean_finess(
+    system.file("data", "t-finess.csv", package = "swmexplopkg"),
+    keep_only_actifs = FALSE
+)
+```
+
+
+# On va prendre des finess mediboard
+
+```{r}
+sample_finess <- sample(1:nrow(swm_base), 10)
+mediboard_finess <- data.frame(
+    finess_geographique = swm_base$finess_geographique[sample_finess],
+    finess_juridique = swm_base$finess_juridique[sample_finess]
+)
+
+join_mediboard_finess <- inner_join(
+    mediboard_finess,
+    t_finess,
+    by = c("finess_geographique" = "finess")
+)
+
+join_mediboard_finess_apm <- bind_rows(
+    inner_join(
+        join_mediboard_finess,
+        apm_light,
+        by = c("finess_geographique" = "finess")
+    ),
+    inner_join(
+        mediboard_finess,
+        t_finess,
+        by = c("finess_juridique" = "finess")
+    )
+) %>%
+    distinct() %>%
+    group_by(finess_geographique) %>%
+    slice_head(n = 1) %>%
+    ungroup()
+
+
+
+
+```
+
+## Aller injecter les infos privés public depuis FINESS, classification des lits depuis FINESS et le nombre de lits depuis APM
+
 
 <!-- Cleaning finess base -->
 
@@ -503,4 +613,65 @@ find_divergence(
             )
         )
     )
+```
+
+
+
+```{r}
+s1 <- readRDS("G:/Shared drives/1_EPI/Epidemio (en cours)/03. Epi Projects/2021 - Epi - ECDC VEBIS/Lot 4 EHR/Technical project docs/Studies and Manuscripts/impact study/data/20232024/Reporting_data_September_August_1208_Navarra.rds")
+date_min <- as.Date("2023-09-01")
+date_max <- as.Date("2024-08-31")
+
+s1 <- readRDS("G:/Shared drives/1_EPI/Epidemio (en cours)/03. Epi Projects/2021 - Epi - ECDC VEBIS/Lot 4 EHR/Technical project docs/Studies and Manuscripts/impact study/data/20242025/Reporting_data_September_August_1007_Navarra.rds")
+date_min <- as.Date("2024-09-01")
+date_max <- as.Date("2025-08-31")
+
+cov <- s1$coverage %>%
+    filter(age_gr == "Overall" & start_of_week >= date_min & start_of_week <= date_max) %>%
+    mutate(vaccinations = as.numeric(vaccinations)) %>%
+    mutate(vaccinations = if_else(is.na(vaccinations), 0, vaccinations)) %>%
+    mutate(coverage = vaccinations / denom_a * 100) %>%
+    mutate(cumsum_coverage = cumsum(coverage)) %>%
+    mutate(source = "coverage")
+
+library(ggplot2)
+plt1 <- ggplot(cov, aes(x = start_of_week, y = cumsum_coverage)) +
+    geom_line() +
+    theme_minimal() +
+    labs(
+        title = "Coverage (%)",
+        x = "Date",
+        y = "Coverage"
+    )
+
+
+incid <- s1$incidence %>%
+    filter(age_gr == "Overall" & seasonal_vaccinee == "Overall") %>%
+    filter(age_gr == "Overall" & start_of_week >= date_min & start_of_week <= date_max) %>%
+    mutate(hosps = as.numeric(hosps)) %>%
+    mutate(hosps = if_else(is.na(hosps), 0, hosps)) %>%
+    mutate(incid = hosps / denom_a * 100000) %>%
+    mutate(source = "incid")
+
+plt2 <- ggplot(incid, aes(x = start_of_week, y = incid, color = source)) +
+    geom_line() +
+    theme_minimal() +
+    labs(
+        title = "Incidence (per 100000)",
+        x = "Date",
+        y = "Incidence"
+    ) +
+    facet_wrap(~source, scales = "free_y")
+
+library(patchwork)
+plt1 + plt2
+
+
+s1_light <- s1 %>%
+    select(finess, mco, ssr, psy, forme_juridique, ej_finess, et_finess)
+
+
+
+
+
 ```

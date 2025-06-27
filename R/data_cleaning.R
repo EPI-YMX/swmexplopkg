@@ -55,12 +55,20 @@ data_clean_swm_base <- function(path) {
 #' @import dplyr
 #' @import sf
 #' @import tidyr
-data_clean_finess <- function(path, keep_only_mco_ssr_psy = FALSE) {
+data_clean_finess <- function(
+    path,
+    keep_only_mco_ssr_psy = FALSE,
+    keep_only_actifs = TRUE
+) {
     t_finess <- data.table::fread(path)
 
+    if (keep_only_actifs) {
+        t_finess <- t_finess %>%
+            filter(etat == "ACTUEL") %>%
+            filter(statut_jur_etat == "O")
+    }
+
     t_finess_clean <- t_finess %>%
-        filter(etat == "ACTUEL") %>%
-        filter(statut_jur_etat == "O") %>%
         filter(geoloc_legal_projection == "L93_METROPOLE") %>%
         mutate(
             mco = san_med == "OUI" | san_chir == "OUI" | san_obs == "OUI",
@@ -88,7 +96,9 @@ data_clean_finess <- function(path, keep_only_mco_ssr_psy = FALSE) {
         "psy",
         "forme_juridique",
         "geoloc_4326_lat",
-        "geoloc_4326_long"
+        "geoloc_4326_long",
+        "ej_finess",
+        "et_finess"
     )
 
     t_finess_clean <- t_finess_clean %>%
@@ -97,7 +107,7 @@ data_clean_finess <- function(path, keep_only_mco_ssr_psy = FALSE) {
     t_finess_4326 <- t_finess_clean %>%
         st_as_sf(coords = c("geoloc_4326_long", "geoloc_4326_lat")) %>%
         st_set_crs(4326) %>%
-        select(finess, mco, ssr, psy, forme_juridique) %>%
+        select(finess, mco, ssr, psy, forme_juridique, ej_finess, et_finess) %>%
         mutate(dept = substr(finess, 1, 2))
 
     t_finess_4326
@@ -111,6 +121,10 @@ keep_only_active_only_on_finess <- function(swm_base, t_finess) {
         etat == "ACTUEL" & statut_jur_etat == "O",
         "finess"
     ]
-    swm_base %>%
+    a <- swm_base %>%
         inner_join(finess_actifs, by = c("finess_geographique" = "finess"))
+    b <- swm_base %>%
+        inner_join(finess_actifs, by = c("finess_juridique" = "finess"))
+    bind_rows(a, b) %>%
+        distinct()
 }
